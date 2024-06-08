@@ -3,7 +3,7 @@ name: Deploy
 on:
   push:
     branches:
-      - main
+      - WIP_deploy_workflow
   workflow_dispatch:
 
 jobs:
@@ -23,14 +23,56 @@ jobs:
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v1
+      
+      - name: Install Wrangler
+        run: npm install -g wrangler
 
-      - name: Deploy
+      - name: Check D1 Binding Existence
+        id: check_d1
+        run: |
+          if wrangler d1 list | grep -q ${{ vars.DB_NAME }}; then
+            echo "::set-output name=exists::true"
+          else
+            echo "::set-output name=exists::false"
+          fi
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Create D1 Binding
+        if: steps.check_d1.outputs.exists == 'false'
+        run: wrangler d1 create ${{ vars.DB_NAME }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Check R2 Bucket Existence
+        id: check_r2
+        run: |
+          if wrangler r2 bucket list | grep -q ${{ vars.S3_BUCKET }}; then
+            echo "::set-output name=exists::true"
+          else
+            echo "::set-output name=exists::false"
+          fi
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Create R2 Bucket
+        if: steps.check_r2.outputs.exists == 'false'
+        run: wrangler r2 bucket create ${{ vars.S3_BUCKET }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Deploy Page
         env: # Or as an environment variable
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID  }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN  }}
           DB_NAME: ${{ vars.DB_NAME }}
           WORKER_NAME: ${{ vars.WORKER_NAME }}
           FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+          S3_BUCKET: ${{ vars.S3_BUCKET }}
           S3_FOLDER: ${{ vars.S3_FOLDER }}
         run: |
           cd Rin/
